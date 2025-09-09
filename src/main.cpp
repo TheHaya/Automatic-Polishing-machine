@@ -8,10 +8,11 @@ const int LEDR = 42, LEDB = 41, LEDG = 40;
 const int ROT_DT1 = 14, ROT_CLK1 = 13;
 const int ROT_DT2 = 12, ROT_CLK2 = 11;
 const int MOT_DIR = 1, MOT_STEP = 2;
+const int MS1_PIN = 38, MS2_PIN = 37, MS3_PIN = 36;
 const int SEG_DIN = 21, SEG_CLK = 16, SEG_LOAD = 39;
 const int RELAY = 46;
-volatile uint8_t valLeft_A = 0, valRight_A = 7;
-volatile uint8_t valLeft_B = 1, valRight_B = 0;
+volatile uint8_t valLeft_A = 0, valRight_A = 8;
+volatile uint8_t valLeft_B = 0, valRight_B = 4;
 volatile int currentSpeed = 0;
 volatile int currentRots = 0;
 volatile int enc_counter1 = 0;
@@ -23,8 +24,9 @@ volatile int enc_counter2 = 0;
 
 elapsedMillis relay_millis;
 elapsedMillis but1Millis, but2Millis;
-unsigned long buttonTimer = 150;
+unsigned long buttonTimer = 200;
 const int stepsRotate = 200;
+const int microStep = 16;
 bool but1Up, but2Up = HIGH;
 
 bool but1Press, but2Press;
@@ -34,7 +36,7 @@ bool isBusy = false;
 volatile int segCounter = valLeft_A * 10 + valRight_A; 
 volatile int segSpdCounter = valLeft_B * 10 + valRight_B;
 int segDelay = segSpdCounter * segCounter;
-int motDelay = 5000; 
+int motDelay; 
 hw_timer_t* timer = nullptr;
 
 Rotary enc1 = Rotary(ROT_DT1,ROT_CLK1);
@@ -104,7 +106,7 @@ void IRAM_ATTR enc2ISR(){
       enc_counter2--;
       segSpdCounter -= 1;
     }
-    segSpdCounter  = constrain(segSpdCounter, 1, 25);
+    segSpdCounter  = constrain(segSpdCounter, 1, 15);
     valLeft_B = segSpdCounter / 10;
     valRight_B = segSpdCounter % 10;
   }
@@ -134,6 +136,9 @@ void setup() {
   pinMode(MOT_STEP, OUTPUT);
   pinMode(MOT_DIR, OUTPUT);
   pinMode(RELAY, OUTPUT);
+  pinMode(MS1_PIN, OUTPUT);
+  pinMode(MS2_PIN, OUTPUT);
+  pinMode(MS3_PIN, OUTPUT);
 
   lc.setScanLimit(0, 3);
   lc.activateAllSegments();
@@ -150,6 +155,9 @@ void setup() {
   digitalWrite(LEDG, HIGH);
   digitalWrite(MOT_DIR, HIGH);
   digitalWrite(RELAY, HIGH);
+  digitalWrite(MS1_PIN, HIGH);
+  digitalWrite(MS2_PIN, HIGH);
+  digitalWrite(MS3_PIN, HIGH);
   attachInterrupt(ROT_CLK1, enc1ISR, CHANGE);
   attachInterrupt(ROT_DT1, enc1ISR, CHANGE);
   attachInterrupt(ROT_CLK2, enc2ISR, CHANGE);
@@ -169,11 +177,11 @@ void writeDigits(){
 }
 
 void userRotate(){
-  long totalSteps = segCounter  * stepsRotate;
+  long totalSteps = segCounter  * stepsRotate * microStep;
   bool lastBut1 = HIGH;
   elapsedMillis cancelBut = 0;
   isBusy = true;
-  motDelay = 6 / (segSpdCounter * 0.0004);
+  motDelay = 6 / (segSpdCounter * 0.0004) / microStep;
   for(long i = 0; i < totalSteps; i++){
     digitalWrite(MOT_STEP, HIGH);
     delayMicroseconds(motDelay);
@@ -194,7 +202,7 @@ void infRotate(){
   bool lastBut2 = HIGH;
   elapsedMillis infButton = 0;
   isBusy = true;
-  motDelay = 6 / (segSpdCounter * 0.0004);
+  motDelay = 6 / (segSpdCounter * 0.0004) / microStep;
   while(true){
     digitalWrite(MOT_STEP, HIGH);
     delayMicroseconds(motDelay);
@@ -212,6 +220,9 @@ void infRotate(){
 }
 
 void loop() {
+  if(digitalRead(BUT1) == LOW){
+    printf("button pressed");
+  }
   if(!isBusy){
     but1Press = digitalRead(BUT1);
     if(but1Up == HIGH && but1Press == LOW && but1Millis > buttonTimer) {
